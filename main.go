@@ -12,8 +12,9 @@ import (
 )
 
 var (
-	signature      = flag.String("selector", "", "selector given")
-	found     bool = false
+	signature        = flag.String("selector", "", "selector given")
+	mustBeZeros      = flag.Bool("all_zeros", false, "force search for zeros")
+	found       bool = false
 )
 
 // Perm calls f with each permutation of a.
@@ -48,19 +49,22 @@ func main() {
 	sig := *signature
 
 	atMost := []byte{0x00, 0x00, 0x00, 0xff}
-	wanted := []byte{0x00, 0x00, 0x00, 0x01}
+	wanted := []byte{0x00, 0x00, 0x00, 0x00}
 	started := time.Now()
+	p := *mustBeZeros
 
 	Perm([]rune("abcdefghijklmn"), func(a []rune) {
 		combined := string(a) + "(" + sig + ")"
 		b := crypto.Keccak256([]byte(combined))[:4]
 
 		if bytes.Equal(wanted, b) {
-			fmt.Println("FOUND after", time.Since(started), "signature should be", combined)
+			fmt.Println("FOUND exactly all zeros after",
+				time.Since(started), "signature should be", combined,
+			)
 			return
 		}
 
-		if bytes.Compare(b, atMost) == -1 {
+		if p == false && bytes.Compare(b, atMost) == -1 {
 			fmt.Println("this is good enough - can do ctrl-c now",
 				"use this as your signature",
 				combined, "found after",
@@ -72,4 +76,6 @@ func main() {
 			return
 		}
 	})
+
+	fmt.Println("odd didnt not find match - please report ticket ")
 }
