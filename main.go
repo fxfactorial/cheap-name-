@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -39,6 +40,20 @@ func perm(a []rune, f func([]rune), i int) {
 	}
 }
 
+func permutate(input string, parent string) []string {
+	if len(input) == 1 {
+		return []string{parent + input}
+	}
+
+	var permutations []string
+	for i := 0; i < len(input); i++ {
+		restOfInput := input[0:i] + input[i+1:]
+		curChar := input[i : i+1]
+		permutations = append(permutations, permutate(restOfInput, parent+curChar)...)
+	}
+	return permutations
+}
+
 func main() {
 	flag.Parse()
 
@@ -52,30 +67,44 @@ func main() {
 	wanted := []byte{0x00, 0x00, 0x00, 0x00}
 	started := time.Now()
 	p := *mustBeZeros
+	t0 := time.Now()
+	fmt.Println("generating all the permutations ")
 
-	Perm([]rune("abcdefghijklmn"), func(a []rune) {
-		combined := string(a) + "(" + sig + ")"
-		b := crypto.Keccak256([]byte(combined))[:4]
+	all := permutate("abcdefghijk", "")
+	fmt.Println("took", time.Since(t0), "to generate all permutations")
 
-		if bytes.Equal(wanted, b) {
-			fmt.Println("FOUND exactly all zeros after",
-				time.Since(started), "signature should be", combined,
-			)
-			return
-		}
+	length := len(all)
+	chopped := length / 4
 
-		if p == false && bytes.Compare(b, atMost) == -1 {
-			fmt.Println("this is good enough - can do ctrl-c now",
-				"use this as your signature",
-				combined, "found after",
-				time.Since(started),
-				hexutil.Encode(b),
-			)
+	fmt.Println("kicking off 4 threads")
 
-			found = true
-			return
-		}
-	})
+	for i := 0; i < 4; i++ {
+		fmt.Println("range", i*chopped, i*chopped+chopped)
+		subrange := all[i*chopped : i*chopped+chopped]
+		go func() {
+			for _, a := range subrange {
+				combined := string(a) + "(" + sig + ")"
+				b := crypto.Keccak256([]byte(combined))[:4]
 
-	fmt.Println("odd didnt not find match - please report ticket ")
+				if bytes.Equal(wanted, b) {
+					fmt.Println("FOUND exactly all zeros after",
+						time.Since(started), "signature should be", combined,
+					)
+					os.Exit(0)
+					return
+				}
+
+				if p == false && bytes.Compare(b, atMost) == -1 {
+					fmt.Println("this is good enough - can do ctrl-c now",
+						"use this as your signature",
+						combined, "found after",
+						time.Since(started),
+						hexutil.Encode(b),
+					)
+				}
+			}
+		}()
+	}
+
+	select {}
 }
